@@ -1,39 +1,88 @@
-# Danish phonebook extraction
+# Danish phonebooks → DuckDB
 
-A small research pipeline that turns a searchable Danish phonebook PDF into newline-delimited JSON and a DuckDB database.
+Turn historical Danish telephone directories into structured data you can query with SQL.
 
-The parser was developed against one historical, three-column, name-indexed phonebook. It is a work in progress and does not yet handle every phonebook layout. It uses the PDF text layer and does not run OCR. No source PDFs or extracted records are tracked in the public source tree; local artifacts are kept in the ignored .local archive.
+Phonebooks contain more than phone numbers: names, addresses, occupations, and a record of who was listed where. This project takes those entries from a PDF text layer, parses their irregular formatting, and builds a local DuckDB database for exploration and analysis.
+
+Developed for historical Danish phonebooks with a searchable text layer, with parsing rules tailored to a three-column, name-indexed layout.
+
+## What it does
+
+- **Extracts structured listings:** names, streets, house numbers, occupations, and phone numbers, with fields for fax and unlisted entries.
+- **Interprets directory conventions:** carries forward repeated surnames, recognises occupation abbreviations, and normalises common character substitutions in phone numbers.
+- **Keeps results traceable:** each record retains its source page number and raw text line for inspection.
+- **Supports longer extraction runs:** processes selected page ranges in configurable chunks, reports progress, logs extraction errors, and can resume after the last written page.
+- **Makes the data queryable:** exports JSONL and builds DuckDB tables for all listings and listings organised by street.
+
+## From document layout to data
+
+```text
+Searchable PDF → text extraction → entry parsing → JSONL → DuckDB
+```
+
+The extraction combines `pdfplumber` with parsing rules for the directory's typography and entry structure. Leader-dot runs separate entry headings from telephone details; the parser then resolves names, addresses, occupations, and number fields. JSONL provides an inspectable intermediate format before loading into DuckDB.
+
+The database contains two tables:
+
+| Table | Contents |
+| --- | --- |
+| `listings` | Extracted records, including source text and parsing fields |
+| `street_residents` | Street, house number, names, phone, occupation, unlisted status, and source page for entries with a street value |
+
+For example, count extracted listings by street:
+
+```sql
+SELECT street, count(*) AS listings
+FROM street_residents
+GROUP BY street
+ORDER BY listings DESC;
+```
 
 ## Setup
 
 Use Python 3.12 (tested with 3.12.4).
 
-    python -m venv .venv
-    python -m pip install -r requirements.txt
+```sh
+python -m venv .venv
+```
 
-Activate the environment with the command for your shell:
+Activate the environment:
 
-Windows PowerShell:
+```powershell
+# Windows PowerShell
+.venv\Scripts\Activate.ps1
+```
 
-    .venv\Scripts\Activate.ps1
+```sh
+# macOS or Linux
+source .venv/bin/activate
+```
 
-macOS or Linux:
+Then install the dependencies:
 
-    source .venv/bin/activate
+```sh
+python -m pip install -r requirements.txt
+```
 
 ## Run
 
-Keep source PDFs and generated data on your machine. For example, put generated files under the ignored data directory.
+Extract a page range from a local PDF, then build the database:
 
-    python scripts/extract.py "PATH_TO_LOCAL_PDF" --output data/rows.jsonl --start-page 101 --end-page 115
-    python scripts/build_db.py data/rows.jsonl data/phonebook.duckdb
+```sh
+python scripts/extract.py "PATH_TO_LOCAL_PDF" --output data/rows.jsonl --start-page 101 --end-page 115
+python scripts/build_db.py data/rows.jsonl data/phonebook.duckdb
+```
 
-Omit the page range options to process the full PDF. Page numbers are one-based and inclusive. The extractor opens the PDF in chunks to limit memory use. Use the resume option to continue an interrupted run with the same PDF and output file. Existing outputs are protected; pass the overwrite option only when you mean to replace them.
+Choose pages containing directory listings. Page numbers are one-based and inclusive; omit the page range options to process the full PDF.
 
-The JSONL records retain a raw source line for checking parser results. Treat generated files as personal data and keep them local. The database contains a listings table and a street_residents table. The loader prints aggregate counts only.
+The extractor opens the PDF in chunks of 25 pages by default; adjust this with `--chunk-size`. To continue an interrupted run, repeat the extraction command with `--resume`, using the same PDF, output file, and page range. Existing outputs are protected from replacement unless `--overwrite` is supplied.
 
-## Project status
+The database loader reports row counts, source page counts, and the number of records outside its phone/fax/unlisted checks.
 
-This is a research snapshot, not a maintained data service or a complete Denmark-wide dataset. The parser has known extraction errors and is tuned to a particular book layout. See the pipeline notes in docs/pipeline.md for the method and limitations.
+## Project files
 
-The local PDFs, parsed records, databases, logs, rendered pages, samples, and internal working notes are excluded from Git by .gitignore.
+- [`scripts/extract.py`](scripts/extract.py): PDF extraction, entry parsing, and JSONL output.
+- [`scripts/build_db.py`](scripts/build_db.py): DuckDB loading and street-oriented table creation.
+- [`docs/pipeline.md`](docs/pipeline.md): processing details and notes for adapting the parser to other layouts.
+
+Source PDFs and generated records stay local. The repository contains the pipeline and documentation; `.gitignore` excludes PDFs, databases, generated data, and internal working notes. Extracted listings contain personal data, so keep generated files local as well.
