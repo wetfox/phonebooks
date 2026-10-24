@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+
+# Local data and generated output
+.local/
+data/
+*.pdf
+*.duckdb
+*.db
+*.sqlite
+*.sqlite3
+*.jsonl
+*.csv
+*.log
+*.tmp
+*.png
+*.jpg
+*.jpeg
+
+# Existing local research folders, if retained at the project root
+cut/
+dk_pdfs/
+manifest/
+render/
+runs/
+samples/
+
+# Private working notes
+HANDOFF*.md
